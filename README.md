@@ -70,12 +70,15 @@ downloads into the Colab runtime and inference happens on the GPU Colab gives
 you. Section 5 launches the interface above; section 6 is the command-line path
 for batch work.
 
-It works whether this repository is public or private. Private needs two things:
-Colab authorised for private repos when opening the notebook (File → Open
-notebook → GitHub → *Include private repos*), and a fine-grained read token
-stored as a Colab secret named `GH_TOKEN` for the clone step. Never paste a
-token into a cell — Colab saves cell contents, and the notebook would carry it
-back to GitHub.
+The notebook carries `transcribe.py` and `app.py` inside it, so it fetches
+nothing at run time. Repository visibility, tokens and Colab secrets are all
+irrelevant to it — it runs the same from a private repository, a Drive copy, or
+a file someone emailed you.
+
+The copies are kept honest by CI rather than by discipline: `tools/embed_sources.py
+--check` re-embeds and fails the build if the result differs, so a change to the
+sources that never reached the notebook cannot merge. After editing either
+source, run `python tools/embed_sources.py`.
 
 It is not a substitute for the Docker path on a confidential recording. Colab is
 Google infrastructure: the model runs locally to the runtime, but the audio you

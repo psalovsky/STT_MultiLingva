@@ -22,6 +22,21 @@ jobs:
 
       - run: python stub_test.py
 
+  notebook-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The notebook carries copies of the sources so it needs nothing at run
+      # time. This is what stops those copies going stale: edit transcribe.py
+      # without re-embedding and the build fails here rather than in someone's
+      # Colab session three weeks later.
+      - run: python tools/embed_sources.py --check
+
   interface-imports:
     runs-on: ubuntu-latest
     steps:
