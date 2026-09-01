@@ -1,0 +1,4 @@
+faster-whisper==1.2.1
+# Speaker labels. Optional: the weights are gated on HuggingFace and need a
+# one-time authenticated download, which some perimeters will not allow.
+# pyannote.audio==3.3.2

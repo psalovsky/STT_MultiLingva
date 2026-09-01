@@ -1,0 +1,30 @@
+services:
+  transcribe:
+    build:
+      context: .
+      args:
+        MODEL: large-v3
+    environment:
+      # Weights are already in the image; refuse any network call for them, so
+      # "nothing leaves the machine" is enforced rather than assumed.
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - ./audio:/audio
+      - ./out:/out
+      - models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command:
+      - /audio/meeting.m4a
+      - --model=large-v3
+      - --languages=ru,en
+      - --primary=ru
+      - --out=/out/meeting
+
+volumes:
+  models:
