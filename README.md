@@ -43,10 +43,32 @@ container refuses any network call for them — the offline guarantee is enforce
 rather than assumed. If your runtime perimeter has no egress at all, drop the
 download line from the Dockerfile and mount a pre-populated `/models` volume.
 
+## The interface
+
+`app.py` is a drag-and-drop page over the same pipeline: drop a recording, pick
+the languages, get the transcript plus SRT, TXT and JSON. It accepts audio and
+video alike — PyAV pulls the audio stream out of an mp4, so a screen recording
+of a call needs no conversion.
+
+```bash
+docker compose up ui        # then open http://localhost:7860
+```
+
+Gradio rather than Streamlit, for one reason that matters here: Streamlit in
+Colab needs a tunnel (localtunnel, ngrok) to be reachable at all, while Gradio
+renders inside the notebook and mints a share link with one flag. The same file
+therefore serves the GPU box and the Colab runtime without a second code path.
+
+The model is cached across requests, so only the first transcription pays the
+load, and progress is reported per window — a four-hour recording otherwise
+looks hung.
+
 ## Run on Colab
 
-`colab_stt_multilingva.ipynb` runs the same script on a free T4 — useful when
-there is no GPU to hand and you want to see the tool work.
+`colab_stt_multilingva.ipynb` runs the same code on a free T4 — the model
+downloads into the Colab runtime and inference happens on the GPU Colab gives
+you. Section 5 launches the interface above; section 6 is the command-line path
+for batch work.
 
 It is not a substitute for the Docker path on a confidential recording. Colab is
 Google infrastructure: the model runs locally to the runtime, but the audio you
