@@ -13,6 +13,7 @@ and later ones do not.
 
 from __future__ import annotations
 
+import gc
 import os
 import sys
 import tempfile
@@ -50,6 +51,19 @@ def get_model(name: str, device: str, compute_type: str) -> WhisperModel:
     if key not in _models:
         _models[key] = WhisperModel(name, device=device, compute_type=compute_type)
     return _models[key]
+
+
+def release_models() -> int:
+    """Drop the cached models so their GPU memory goes back.
+
+    Transcribing again reloads from disk -- seconds, not the original download.
+    Worth doing between long files on a runtime that is also being used for
+    something else; not worth doing between two clips.
+    """
+    freed = len(_models)
+    _models.clear()
+    gc.collect()
+    return freed
 
 
 def run(

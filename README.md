@@ -86,6 +86,18 @@ upload has left your machine and is on Google's servers. That is the disclosure
 avoiding a transcription API was meant to prevent. Use Colab for audio you are
 free to share, and your own GPU for the rest.
 
+### Releasing the GPU
+
+Colab charges for a T4 while one is assigned, not for how hard it works, and
+holds an idle runtime for a while before reclaiming it — closing the tab is not
+the same as giving it back. The notebook's last section does both levels:
+`app.release_models()` frees the model's memory between files while keeping the
+session, and `runtime.unassign()` ends it outright.
+
+The release cell refuses once if `/content/out` still holds files, and releases
+on a rerun. Downloading does not empty that directory, so rerunning is the
+confirmation rather than a re-check.
+
 ## Run without Docker
 
 ```bash
