@@ -11,9 +11,12 @@ English that locks onto whichever language opened it, and the other one comes
 out transliterated, machine-translated into the first, or silently dropped.
 
 `transcribe.py` classifies each speech window separately. Voice activity
-detection cuts the audio at silence — never mid-speech, so a window cannot
-straddle the moment a speaker switches — then each window is classified against
-the languages you say to expect, and transcribed with that one pinned.
+detection finds the speech, and windows end at any pause of `--split-silence` or
+more — that is where turn-taking happens, and a window spanning a speaker change
+gets decoded entirely in whichever language its opening utterance was. Shorter
+pauses are merged over, because a two-second fragment classifies badly. Each
+window is then classified against the languages you say to expect and
+transcribed with that one pinned.
 
 Two details that matter in practice:
 
@@ -94,7 +97,8 @@ machine and copy them across. Transcription works without it; you just get no
 | Flag | Default | Reach for it when |
 | --- | --- | --- |
 | `--threshold` | `0.6` | Too much lands on the primary language → lower it. Wrong languages appear → raise it. |
-| `--window` | `30.0` | Speakers alternate rapidly → shorten to 10–15s for finer language resolution, at some cost in accuracy per window. |
+| `--split-silence` | `0.7` | Two speakers in different languages land in one window → lower it. Single sentences fragment into unclassifiable pieces → raise it. |
+| `--window` | `30.0` | Caps a window even with no qualifying pause; a monologue longer than this is cut into even pieces. |
 | `--min-silence-ms` | `500` | Windows cut mid-sentence → raise it. |
 | `--beam-size` | `5` | Lower to 1 for a fast first pass over a long file. |
 
@@ -104,9 +108,11 @@ file.
 
 ## What has and has not been tested
 
-Verified on CPU with a stubbed model: VAD windowing, the allowed-set filter,
-the fallback path, timestamp offset arithmetic across windows, and SRT/TXT/JSON
-output.
+Verified on CPU with a stubbed model (`stub_test.py`, 18 checks): windowing
+across turn-taking pauses and breaths, splitting an oversized monologue, the
+allowed-set filter, the fallback path, diarization failures leaving the
+transcription intact, timestamp offset arithmetic across windows, and
+SRT/TXT/JSON output.
 
 Not verified here: transcription quality itself. The environment this was built
 in blocks huggingface.co, so real weights were never loaded. Run the excerpt

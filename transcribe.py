@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -48,13 +49,17 @@ def group_speech_windows(
     max_window: float,
     min_silence_ms: int,
     speech_pad_ms: int,
+    split_silence: float,
 ) -> list[tuple[int, int]]:
     """Merge VAD speech regions into windows of at most `max_window` seconds.
 
-    Language detection needs a few seconds of speech to be reliable, and Whisper
-    decodes 30s at a time, so isolated VAD regions are merged up to that bound.
-    A window is cut at a silence boundary, never mid-speech, so a window never
-    straddles the point where a speaker switches language.
+    Language detection needs a few seconds of speech to be reliable, so isolated
+    VAD regions are merged -- but only across pauses short enough to be breath
+    within one person's turn. A gap of `split_silence` or more ends the window
+    regardless of how much room is left, because that is where a speaker change
+    happens, and a window spanning one is decoded entirely in whichever language
+    its opening utterance was classified as. Merging on window room alone would
+    swallow exactly the Russian-pause-English sequence this tool exists for.
     """
     regions = get_speech_timestamps(
         audio,
@@ -65,17 +70,37 @@ def group_speech_windows(
         return []
 
     limit = int(max_window * SAMPLE_RATE)
+    split_gap = int(split_silence * SAMPLE_RATE)
     windows: list[tuple[int, int]] = []
     start, end = regions[0]["start"], regions[0]["end"]
 
     for region in regions[1:]:
-        if region["end"] - start <= limit:
+        gap = region["start"] - end
+        if gap < split_gap and region["end"] - start <= limit:
             end = region["end"]
         else:
-            windows.append((start, end))
+            windows.extend(split_oversized(start, end, limit))
             start, end = region["start"], region["end"]
-    windows.append((start, end))
+    windows.extend(split_oversized(start, end, limit))
     return windows
+
+
+def split_oversized(start: int, end: int, limit: int) -> list[tuple[int, int]]:
+    """Cut a stretch of uninterrupted speech down to the window limit.
+
+    A speaker can hold the floor for minutes without a pause the VAD will call a
+    boundary. Such a region has to be cut somewhere arbitrary, because the
+    alternative is one enormous window whose language is decided by its opening
+    seconds. Pieces are evenly sized rather than limit-then-remainder, which
+    would leave a final sliver too short to classify.
+    """
+    span = end - start
+    if span <= limit:
+        return [(start, end)]
+
+    pieces = math.ceil(span / limit)
+    step = math.ceil(span / pieces)
+    return [(cut, min(cut + step, end)) for cut in range(start, end, step)]
 
 
 def pick_language(
@@ -152,25 +177,36 @@ def transcribe(
     return lines
 
 
-def attach_speakers(lines: list[Line], audio_path: Path, hf_token: str | None) -> bool:
-    """Label each line with a speaker, if pyannote is installed and available.
+def attach_speakers(
+    lines: list[Line], audio_path: Path, hf_token: str | None
+) -> str | None:
+    """Label each line with a speaker. Returns why it could not, or None.
 
     Kept optional on purpose: pyannote's weights are gated on HuggingFace and
     need a one-time authenticated download, which some environments will not
-    permit. Transcription proceeds without it.
+    permit. Missing weights, a missing token, ungranted access and an empty
+    offline cache all surface here, and by this point the transcription is
+    already done -- so every one of them is reported and swallowed rather than
+    allowed to discard the expensive part of the run.
     """
     try:
         from pyannote.audio import Pipeline
     except ImportError:
-        return False
+        return "pyannote.audio is not installed"
 
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1", use_auth_token=hf_token
-    )
-    turns = [
-        (turn.start, turn.end, speaker)
-        for turn, _, speaker in pipeline(str(audio_path)).itertracks(yield_label=True)
-    ]
+    try:
+        pipeline = Pipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1", use_auth_token=hf_token
+        )
+        # pyannote answers an auth failure with None instead of raising.
+        if pipeline is None:
+            return "pyannote returned no pipeline (check the token and model access)"
+        turns = [
+            (turn.start, turn.end, speaker)
+            for turn, _, speaker in pipeline(str(audio_path)).itertracks(yield_label=True)
+        ]
+    except Exception as error:
+        return f"diarization failed ({type(error).__name__}: {error})"
 
     for line in lines:
         midpoint = (line.start + line.end) / 2
@@ -179,7 +215,7 @@ def attach_speakers(lines: list[Line], audio_path: Path, hf_token: str | None) -
         match = next((s for start, end, s in turns if start <= midpoint <= end), None)
         line.speaker = match
 
-    return True
+    return None
 
 
 def format_timestamp(seconds: float) -> str:
@@ -240,6 +276,12 @@ def main() -> int:
     parser.add_argument("--window", type=float, default=30.0, help="max window, seconds")
     parser.add_argument("--min-silence-ms", type=int, default=500)
     parser.add_argument("--speech-pad-ms", type=int, default=200)
+    parser.add_argument(
+        "--split-silence",
+        type=float,
+        default=0.7,
+        help="a pause this long ends the window; a speaker change lives here",
+    )
     parser.add_argument("--beam-size", type=int, default=5)
     parser.add_argument("--diarize", action="store_true", help="label speakers via pyannote")
     parser.add_argument("--hf-token", default=None, help="only used by --diarize")
@@ -264,7 +306,7 @@ def main() -> int:
     print(f"  {len(audio) / SAMPLE_RATE / 60:.1f} minutes", file=sys.stderr)
 
     windows = group_speech_windows(
-        audio, args.window, args.min_silence_ms, args.speech_pad_ms
+        audio, args.window, args.min_silence_ms, args.speech_pad_ms, args.split_silence
     )
     if not windows:
         print("No speech found. Check that the file has an audio track.", file=sys.stderr)
@@ -279,8 +321,10 @@ def main() -> int:
         model, audio, windows, allowed, args.primary, args.threshold, args.beam_size
     )
 
-    if args.diarize and not attach_speakers(lines, args.audio, args.hf_token):
-        print("pyannote.audio is not installed; skipping speaker labels", file=sys.stderr)
+    if args.diarize:
+        problem = attach_speakers(lines, args.audio, args.hf_token)
+        if problem:
+            print(f"No speaker labels: {problem}", file=sys.stderr)
 
     written = write_outputs(lines, stem)
 
