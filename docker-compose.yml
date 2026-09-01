@@ -26,5 +26,26 @@ services:
       - --primary=ru
       - --out=/out/meeting
 
+  # Same image, browser instead of a shell: docker compose up ui
+  ui:
+    build:
+      context: .
+      args:
+        MODEL: large-v3
+    environment:
+      HF_HUB_OFFLINE: "1"
+    volumes:
+      - models:/models
+    ports:
+      - "7860:7860"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    entrypoint: ["python3", "app.py"]
+
 volumes:
   models:

@@ -1,4 +1,8 @@
 faster-whisper==1.2.1
+
+# Browser interface (app.py). The CLI does not need it.
+gradio==6.*
+
 # Speaker labels. Optional: the weights are gated on HuggingFace and need a
 # one-time authenticated download, which some perimeters will not allow.
 # pyannote.audio==3.3.2

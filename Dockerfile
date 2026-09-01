@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
-COPY transcribe.py .
+COPY transcribe.py app.py .
 
 # Bake the weights into the image so the container never needs the network at
 # run time. Drop this line to mount a pre-populated /models volume instead --
