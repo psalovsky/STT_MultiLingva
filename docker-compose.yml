@@ -22,7 +22,7 @@ services:
     command:
       - /audio/meeting.m4a
       - --model=large-v3
-      - --languages=ru,en
+      - --languages=ru,en,hy
       - --primary=ru
       - --out=/out/meeting
 

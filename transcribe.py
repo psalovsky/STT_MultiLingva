@@ -296,8 +296,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--languages",
-        default="ru,en",
-        help="languages to consider, comma separated; add hy for Armenian",
+        default="ru,en,hy",
+        help="languages to consider, comma separated; drop hy if no Armenian is spoken",
     )
     parser.add_argument(
         "--primary",

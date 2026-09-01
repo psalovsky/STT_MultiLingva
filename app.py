@@ -160,9 +160,9 @@ def build() -> gr.Blocks:
                 )
                 languages = gr.CheckboxGroup(
                     ["ru", "en", "hy"],
-                    value=["ru", "en"],
+                    value=["ru", "en", "hy"],
                     label="Languages to expect",
-                    info="Narrow this to what is actually spoken — a wider set means more chances to guess wrong.",
+                    info="Uncheck what is not spoken. Every extra language is another one a window can be misread as.",
                 )
                 primary = gr.Radio(
                     ["ru", "en", "hy"],

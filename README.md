@@ -90,7 +90,7 @@ free to share, and your own GPU for the rest.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python transcribe.py meeting.m4a --languages ru,en --primary ru
+.venv/bin/python transcribe.py meeting.m4a --languages ru,en,hy --primary ru
 ```
 
 Input goes through PyAV, so any format works and the `ffmpeg` CLI is not needed.
@@ -106,9 +106,18 @@ choose for the device.
 
 ## Armenian
 
-`large-v3` handles Armenian out of the box at about 15.75% WER across dialects
-— better than commercial APIs, but clearly worse than its Russian and English.
-Add it with `--languages ru,en,hy`.
+Armenian is in the default set: `--languages ru,en,hy`, and checked in the
+interface. `large-v3` handles it out of the box at about 15.75% WER across
+dialects — better than commercial APIs, but clearly worse than its Russian and
+English.
+
+That default is a trade. Whisper ranks all 99 languages it knows and the ranking
+is filtered to the allowed set, so a third entry is a third thing a Russian or
+English window can be misread as — and Armenian, being low-resource, scores
+noisily. If Armenian text starts appearing where none was spoken, raise
+`--threshold` or drop `hy` for that recording. Nothing is lost by dropping it:
+`hy` costs nothing when no Armenian is present *and* nothing goes wrong, but it
+is not free when it does.
 
 If Armenian is a large share of the recording, transcribe twice: once as above,
 then re-run the windows the JSON marks `hy` through a fine-tuned model
