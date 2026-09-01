@@ -248,8 +248,18 @@ def format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 
+def beside(stem: Path, extension: str) -> Path:
+    """Append an extension to the stem instead of replacing what looks like one.
+
+    Path.with_suffix() would replace the last dotted part, so meeting.en.wav and
+    meeting.ru.wav both reduce to meeting.srt and the second run silently
+    overwrites the first -- and notes.v2.final.m4a loses ".final" outright.
+    """
+    return stem.parent / (stem.name + extension)
+
+
 def write_outputs(lines: list[Line], stem: Path) -> list[Path]:
-    srt = stem.with_suffix(".srt")
+    srt = beside(stem, ".srt")
     with srt.open("w", encoding="utf-8") as handle:
         for index, line in enumerate(lines, start=1):
             speaker = f"[{line.speaker}] " if line.speaker else ""
@@ -259,13 +269,13 @@ def write_outputs(lines: list[Line], stem: Path) -> list[Path]:
                 f"{speaker}{line.text}\n\n"
             )
 
-    txt = stem.with_suffix(".txt")
+    txt = beside(stem, ".txt")
     with txt.open("w", encoding="utf-8") as handle:
         for line in lines:
             speaker = f"[{line.speaker}] " if line.speaker else ""
             handle.write(f"{speaker}{line.text}\n")
 
-    js = stem.with_suffix(".json")
+    js = beside(stem, ".json")
     js.write_text(
         json.dumps([asdict(line) for line in lines], ensure_ascii=False, indent=2),
         encoding="utf-8",

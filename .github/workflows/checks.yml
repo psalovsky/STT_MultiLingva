@@ -1,0 +1,39 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  stub-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # stub_test.py stubs the model, so no weights are downloaded and no GPU is
+      # needed. gradio is left out deliberately: the tests exercise the pipeline,
+      # not the interface, and pulling it in would triple the install for nothing.
+      - run: pip install faster-whisper==1.2.1
+
+      - run: python stub_test.py
+
+  interface-imports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      # Catches the class of break that shipped once already: a gradio release
+      # dropping a keyword the interface passes. Building the Blocks exercises
+      # every component signature without needing a model or a browser.
+      - run: python -c "import app; app.build(); print('interface builds')"

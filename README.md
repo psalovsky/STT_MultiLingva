@@ -130,11 +130,15 @@ file.
 
 ## What has and has not been tested
 
-Verified on CPU with a stubbed model (`stub_test.py`, 25 checks): windowing
+Verified on CPU with a stubbed model (`stub_test.py`, 28 checks): windowing
 across turn-taking pauses and breaths, splitting an oversized monologue, the
 allowed-set filter, the fallback path, diarization failures leaving the
 transcription intact, timestamp offset arithmetic across windows, and
 SRT/TXT/JSON output.
+
+CI runs `stub_test.py` on every push and pull request, plus a build of the
+interface — a gradio release removing a keyword the page passes has broken this
+once already, and that check catches it without a model or a browser.
 
 Not verified here: transcription quality itself. The environment this was built
 in blocks huggingface.co, so real weights were never loaded. Run the excerpt

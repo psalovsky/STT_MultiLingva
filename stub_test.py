@@ -7,6 +7,7 @@ diarization does. Run with `python stub_test.py`.
 """
 
 import json
+import pathlib
 import sys
 from dataclasses import dataclass
 
@@ -193,6 +194,20 @@ problem = T.attach_speakers(spoken, "x.wav", None)
 check("diarization succeeds", problem is None, problem)
 check("the speaker holding most of the line wins, not the one at its midpoint",
       spoken[0].speaker == "A", spoken[0].speaker)
+
+
+print("\noutput naming")
+
+# with_suffix() would replace what looks like an extension, so these two collide
+# on meeting.srt and the second run overwrites the first.
+en = T.beside(pathlib.Path("/tmp/meeting.en"), ".srt")
+ru = T.beside(pathlib.Path("/tmp/meeting.ru"), ".srt")
+check("language-suffixed names do not collide", en != ru, (en, ru))
+check("the whole stem is kept",
+      T.beside(pathlib.Path("/tmp/notes.v2.final"), ".json").name == "notes.v2.final.json",
+      T.beside(pathlib.Path("/tmp/notes.v2.final"), ".json").name)
+check("a plain name is unchanged",
+      T.beside(pathlib.Path("/tmp/call"), ".txt").name == "call.txt")
 
 
 print("\nend to end with a stubbed model")
