@@ -125,7 +125,11 @@ def pick_language(
 
     best = max(scores, key=scores.get)
     if scores[best] < threshold:
-        return primary, scores[best]
+        # The primary's own score, not the rejected candidate's. Reporting
+        # en=0.55 as "ru, p=0.55" would make the JSON say the classifier was
+        # fairly confident about Russian when it was not confident about
+        # anything -- and that field is what you tune --threshold against.
+        return primary, scores.get(primary, 0.0)
     return best, scores[best]
 
 
@@ -209,11 +213,16 @@ def attach_speakers(
         return f"diarization failed ({type(error).__name__}: {error})"
 
     for line in lines:
-        midpoint = (line.start + line.end) / 2
-        # A line can straddle a speaker change; the midpoint attributes it to
-        # whoever holds the floor for most of it.
-        match = next((s for start, end, s in turns if start <= midpoint <= end), None)
-        line.speaker = match
+        # Attribute the line to whoever actually holds most of it. Sampling a
+        # single instant instead would hand the whole line to a two-word
+        # interjection that happens to land there, and pyannote turns can
+        # overlap, so the first match is whichever came out of the iterator.
+        held: dict[str, float] = {}
+        for start, end, speaker in turns:
+            shared = min(line.end, end) - max(line.start, start)
+            if shared > 0:
+                held[speaker] = held.get(speaker, 0.0) + shared
+        line.speaker = max(held, key=held.get) if held else None
 
     return None
 

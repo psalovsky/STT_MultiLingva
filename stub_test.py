@@ -102,6 +102,18 @@ lang, prob = T.pick_language(model, np.zeros(SR), ["ru", "en"], "ru", 0.6)
 check("a language outside the allowed set falls back", lang == "ru", lang)
 
 
+class Unsure:
+    """Best allowed candidate is en=0.55, under the threshold; ru sits at 0.10."""
+
+    def detect_language(self, audio=None, **k):
+        return "en", 0.55, [("en", 0.55), ("ru", 0.10)]
+
+
+lang, prob = T.pick_language(Unsure(), np.zeros(SR), ["ru", "en"], "ru", 0.6)
+check("a rejected candidate's score is not reported as the primary's",
+      (lang, prob) == ("ru", 0.10), (lang, prob))
+
+
 print("\ndiarization must never cost the transcription")
 
 lines = [T.Line(0.0, 1.0, "ru", 0.9, "text")]
@@ -131,6 +143,34 @@ class ReturnsNone:
 sys.modules["pyannote.audio"].Pipeline = ReturnsNone
 problem = T.attach_speakers(lines, "x.wav", None)
 check("a None pipeline is reported, not dereferenced", problem is not None, problem)
+
+
+class Turn:
+    def __init__(self, start, end):
+        self.start, self.end = start, end
+
+
+class Diarization:
+    """A holds 9 of the line's 10 seconds; B's one second covers the midpoint."""
+
+    def itertracks(self, yield_label=True):
+        return [(Turn(0.0, 4.5), None, "A"),
+                (Turn(4.5, 5.5), None, "B"),
+                (Turn(5.5, 10.0), None, "A")]
+
+
+class Working:
+    @staticmethod
+    def from_pretrained(*a, **k):
+        return lambda path: Diarization()
+
+
+sys.modules["pyannote.audio"].Pipeline = Working
+spoken = [T.Line(0.0, 10.0, "ru", 0.9, "one long line")]
+problem = T.attach_speakers(spoken, "x.wav", None)
+check("diarization succeeds", problem is None, problem)
+check("the speaker holding most of the line wins, not the one at its midpoint",
+      spoken[0].speaker == "A", spoken[0].speaker)
 
 
 print("\nend to end with a stubbed model")

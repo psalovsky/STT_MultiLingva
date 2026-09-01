@@ -108,7 +108,7 @@ file.
 
 ## What has and has not been tested
 
-Verified on CPU with a stubbed model (`stub_test.py`, 18 checks): windowing
+Verified on CPU with a stubbed model (`stub_test.py`, 21 checks): windowing
 across turn-taking pauses and breaths, splitting an oversized monologue, the
 allowed-set filter, the fallback path, diarization failures leaving the
 transcription intact, timestamp offset arithmetic across windows, and
