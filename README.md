@@ -70,6 +70,13 @@ downloads into the Colab runtime and inference happens on the GPU Colab gives
 you. Section 5 launches the interface above; section 6 is the command-line path
 for batch work.
 
+It works whether this repository is public or private. Private needs two things:
+Colab authorised for private repos when opening the notebook (File → Open
+notebook → GitHub → *Include private repos*), and a fine-grained read token
+stored as a Colab secret named `GH_TOKEN` for the clone step. Never paste a
+token into a cell — Colab saves cell contents, and the notebook would carry it
+back to GitHub.
+
 It is not a substitute for the Docker path on a confidential recording. Colab is
 Google infrastructure: the model runs locally to the runtime, but the audio you
 upload has left your machine and is on Google's servers. That is the disclosure
