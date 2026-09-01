@@ -61,9 +61,16 @@ def group_speech_windows(
     its opening utterance was classified as. Merging on window room alone would
     swallow exactly the Russian-pause-English sequence this tool exists for.
     """
+    # Padding is deliberately switched off here and applied at the end. The VAD
+    # grows every region by speech_pad_ms on each side, and where the silence
+    # between two regions is shorter than twice that, it splits the difference
+    # instead -- so the gap this function can see is the real pause minus 0.4s,
+    # or zero. Measuring --split-silence against that would silently require a
+    # 1.1s pause to mean 0.7, and 0.7-1.1s is ordinary turn-taking: exactly the
+    # switch this is supposed to catch.
     regions = get_speech_timestamps(
         audio,
-        VadOptions(min_silence_duration_ms=min_silence_ms, speech_pad_ms=speech_pad_ms),
+        VadOptions(min_silence_duration_ms=min_silence_ms, speech_pad_ms=0),
         sampling_rate=SAMPLE_RATE,
     )
     if not regions:
@@ -71,6 +78,7 @@ def group_speech_windows(
 
     limit = int(max_window * SAMPLE_RATE)
     split_gap = int(split_silence * SAMPLE_RATE)
+    pad = int(speech_pad_ms / 1000 * SAMPLE_RATE)
     windows: list[tuple[int, int]] = []
     start, end = regions[0]["start"], regions[0]["end"]
 
@@ -82,7 +90,12 @@ def group_speech_windows(
             windows.extend(split_oversized(start, end, limit))
             start, end = region["start"], region["end"]
     windows.extend(split_oversized(start, end, limit))
-    return windows
+
+    # Now restore the padding the VAD would have added, so a decoded window
+    # still carries the leading and trailing moment that keeps Whisper from
+    # clipping the first and last word.
+    ceiling = len(audio)
+    return [(max(0, s - pad), min(ceiling, e + pad)) for s, e in windows]
 
 
 def split_oversized(start: int, end: int, limit: int) -> list[tuple[int, int]]:

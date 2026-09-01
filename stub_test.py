@@ -26,19 +26,28 @@ def check(name, condition, detail=""):
         failures.append(name)
 
 
-def windows_from(regions, max_window=30.0, split_silence=0.7):
-    """Drive the windowing with a fixed VAD result instead of real audio."""
+def windows_from(regions, max_window=30.0, split_silence=0.7, pad_ms=200):
+    """Drive the windowing with a fixed VAD result instead of real audio.
+
+    The fake stands in for an unpadded VAD, which is what the code now asks for:
+    regions are the true speech boundaries and the gaps between them are real
+    pause lengths.
+    """
     original = T.get_speech_timestamps
-    T.get_speech_timestamps = lambda *a, **k: [
-        {"start": int(s * SR), "end": int(e * SR)} for s, e in regions
-    ]
+    seen = {}
+
+    def fake(audio, vad_options=None, **k):
+        seen["pad"] = vad_options.speech_pad_ms
+        return [{"start": int(s * SR), "end": int(e * SR)} for s, e in regions]
+
+    T.get_speech_timestamps = fake
     try:
         raw = T.group_speech_windows(
-            np.zeros(SR * 600, dtype=np.float32), max_window, 500, 200, split_silence
+            np.zeros(SR * 600, dtype=np.float32), max_window, 500, pad_ms, split_silence
         )
     finally:
         T.get_speech_timestamps = original
-    return [(round(s / SR, 2), round(e / SR, 2)) for s, e in raw]
+    return [(round(s / SR, 2), round(e / SR, 2)) for s, e in raw], seen.get("pad")
 
 
 print("\nwindowing")
@@ -46,25 +55,38 @@ print("\nwindowing")
 # The case the tool exists for: Russian, a turn-taking pause, then English.
 # Both fit inside one 30s window, so merging on window room alone would put
 # them in one chunk and decode the English in Russian.
-w = windows_from([(0, 5), (7, 12)])
+w, pad_asked = windows_from([(0, 5), (7, 12)])
 check("a turn-taking pause splits the window", len(w) == 2, w)
+check("the VAD is asked for unpadded regions", pad_asked == 0, pad_asked)
+
+# The gap the code compares against --split-silence has to be the real pause.
+# With padding left on, the VAD reports this 0.8s gap as 0.4s and it merges --
+# and anything under 0.4s as zero.
+w, _ = windows_from([(0, 5), (5.8, 12)], split_silence=0.7)
+check("a 0.8s pause splits, not only a 1.1s one", len(w) == 2, w)
+
+# Padding is restored afterwards, so a decoded window still carries the moment
+# either side that keeps Whisper from clipping the first and last word.
+w, _ = windows_from([(2, 5)], pad_ms=200)
+check("padding is applied to the finished window", w == [(1.8, 5.2)], w)
+check("padding cannot run past zero", windows_from([(0.1, 5)], pad_ms=200)[0][0][0] == 0.0)
 
 # A breath inside one person's turn should not fragment the window: short
 # pieces classify badly, which is the reason merging exists at all.
-w = windows_from([(0, 5), (5.3, 12)])
+w, _ = windows_from([(0, 5), (5.3, 12)], pad_ms=0)
 check("a breath does not split the window", w == [(0.0, 12.0)], w)
 
 # One speaker holding the floor past the limit still has to be cut, or the
 # window's language is decided by its opening seconds.
-w = windows_from([(0, 95)], max_window=30.0)
+w, _ = windows_from([(0, 95)], max_window=30.0, pad_ms=0)
 check("an oversized region is split", len(w) == 4, w)
 check("every piece is within the limit", all(e - s <= 30.0 for s, e in w), w)
 check("pieces are contiguous", all(round(w[i][1], 2) == round(w[i + 1][0], 2) for i in range(len(w) - 1)), w)
 check("pieces cover the region", w[0][0] == 0.0 and w[-1][1] == 95.0, w)
 check("no sliver at the end", w[-1][1] - w[-1][0] > 5.0, w)
 
-check("silence only yields no windows", windows_from([]) == [])
-check("a single short region is one window", windows_from([(0, 4)]) == [(0.0, 4.0)])
+check("silence only yields no windows", windows_from([])[0] == [])
+check("a single short region is one window", windows_from([(0, 4)], pad_ms=0)[0] == [(0.0, 4.0)])
 
 
 print("\nlanguage selection")
@@ -199,7 +221,11 @@ check("the run succeeds", rc == 0, rc)
 out = json.load(open("/tmp/stubout/run.json"))
 starts = [l["start"] for l in out]
 check("offsets are monotonic", starts == sorted(starts), starts)
-check("the second window is offset, not restarted", starts[2] >= 6.5, starts)
+# The second region begins at 6.5s and the finished window is padded 200ms
+# ahead of it, so its first line starts at 6.3 -- not back at zero, which is
+# what a missing offset would look like.
+check("the second window is offset, not restarted",
+      6.2 <= starts[2] <= 6.6, starts)
 check("output files are written", all(
     __import__("os").path.exists(f"/tmp/stubout/run{ext}") for ext in (".srt", ".txt", ".json")))
 

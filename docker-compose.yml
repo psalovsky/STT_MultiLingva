@@ -34,6 +34,9 @@ services:
         MODEL: large-v3
     environment:
       HF_HUB_OFFLINE: "1"
+      # Must match the MODEL build arg: with downloads off, any other choice in
+      # the dropdown would fail at load.
+      STT_MODELS: "large-v3"
     volumes:
       - models:/models
     ports:

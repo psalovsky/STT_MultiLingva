@@ -119,7 +119,7 @@ machine and copy them across. Transcription works without it; you just get no
 | Flag | Default | Reach for it when |
 | --- | --- | --- |
 | `--threshold` | `0.6` | Too much lands on the primary language → lower it. Wrong languages appear → raise it. |
-| `--split-silence` | `0.7` | Two speakers in different languages land in one window → lower it. Single sentences fragment into unclassifiable pieces → raise it. |
+| `--split-silence` | `0.7` | A real pause, measured before VAD padding is applied. Two speakers in different languages land in one window → lower it. Single sentences fragment into unclassifiable pieces → raise it. |
 | `--window` | `30.0` | Caps a window even with no qualifying pause; a monologue longer than this is cut into even pieces. |
 | `--min-silence-ms` | `500` | Windows cut mid-sentence → raise it. |
 | `--beam-size` | `5` | Lower to 1 for a fast first pass over a long file. |
@@ -130,7 +130,7 @@ file.
 
 ## What has and has not been tested
 
-Verified on CPU with a stubbed model (`stub_test.py`, 21 checks): windowing
+Verified on CPU with a stubbed model (`stub_test.py`, 25 checks): windowing
 across turn-taking pauses and breaths, splitting an oversized monologue, the
 allowed-set filter, the fallback path, diarization failures leaving the
 transcription intact, timestamp offset arithmetic across windows, and

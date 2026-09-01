@@ -13,7 +13,7 @@ and later ones do not.
 
 from __future__ import annotations
 
-import json
+import os
 import sys
 import tempfile
 import time
@@ -29,6 +29,18 @@ import transcribe as T
 # a mov, so a screen recording of a call works without converting it first.
 ACCEPTED = [".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus", ".aac",
             ".mp4", ".mov", ".mkv", ".webm", ".avi"]
+
+# The offline image bakes in exactly one model and sets HF_HUB_OFFLINE=1, so
+# offering the others there would hand the user a dropdown whose other entries
+# fail at load. Compose passes the baked model in; unset (Colab, a plain venv)
+# means downloads work and the full list is honest.
+MODEL_CHOICES = [
+    name.strip()
+    for name in os.environ.get(
+        "STT_MODELS", "large-v3,large-v3-turbo,medium,small"
+    ).split(",")
+    if name.strip()
+]
 
 _models: dict[tuple[str, str, str], WhisperModel] = {}
 
@@ -78,14 +90,21 @@ def run(
     model = get_model(model_name, device, compute_type)
 
     lines: list[T.Line] = []
+    unsure = 0
     for index, (start, end) in enumerate(windows):
         progress(
             0.10 + 0.88 * index / len(windows),
             desc=f"Transcribing {index + 1}/{len(windows)}",
         )
-        lines.extend(
-            T.transcribe(model, audio, [(start, end)], languages, primary, threshold, beam_size)
+        produced = T.transcribe(
+            model, audio, [(start, end)], languages, primary, threshold, beam_size
         )
+        # Counted per window, not per line: one window emits several lines that
+        # all carry its single classification, so counting lines would report
+        # more uncertain windows than there are windows.
+        if produced and produced[0].language_probability < 0.75:
+            unsure += 1
+        lines.extend(produced)
 
     if not lines:
         raise gr.Error("Speech was found but nothing was transcribed. Try a different model size.")
@@ -97,13 +116,13 @@ def run(
     spread: dict[str, int] = {}
     for line in lines:
         spread[line.language] = spread.get(line.language, 0) + 1
-    unsure = sum(1 for line in lines if line.language_probability < 0.75)
 
     elapsed = (time.time() - started) / 60
     summary = "\n".join([
         f"{minutes:.1f} min of audio, {len(windows)} windows, {len(lines)} lines",
         f"languages: " + ", ".join(f"{k} {v}" for k, v in sorted(spread.items())),
-        f"low-confidence windows: {unsure}" + (" — check those lines in the JSON" if unsure else ""),
+        f"low-confidence windows: {unsure} of {len(windows)}"
+        + (" — check those lines in the JSON" if unsure else ""),
         f"took {elapsed:.1f} min on {device}",
     ])
 
@@ -155,8 +174,8 @@ def build() -> gr.Blocks:
 
                 with gr.Accordion("Tuning", open=False):
                     model_name = gr.Dropdown(
-                        ["large-v3", "large-v3-turbo", "medium", "small"],
-                        value="large-v3",
+                        MODEL_CHOICES,
+                        value=MODEL_CHOICES[0],
                         label="Model",
                         info="large-v3 for quality. turbo is much faster but weaker on Armenian.",
                     )
